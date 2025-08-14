@@ -1,7 +1,7 @@
 Emmanuella Oluferanmi Odedele
 
 ## 📌 About Me
-I am a Computer Engineering undergraduate at Covenant University (CGPA 4.38, Second Class Upper) with a passion for **hardware–software integration**, **petrochemical engineering applications**.  
+I am a Computer Engineering undergraduate at Covenant University with a passion for **hardware–software integration**, **petrochemical engineering applications**.  
 Currently gaining downstream petroleum engineering experience through the **Student Work Experience Program (SWEP)** by producing detergent from oil.  
 I aim to apply my skills to **instrumentation, control systems, and data-driven optimization** in industrial operations.
 
