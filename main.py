@@ -1,99 +1,94 @@
-import logging
-
-import matplotlib.pyplot as plt
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-
-logging.basicConfig(
-    filename='web_scraping.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
 
 
-def scrape_techcrunch_headlines():
+def process_dataset(file_path, output_file=None):
     """
-    Scrapes the latest headlines from the TechCrunch homepage.
+    Loads and processes a dataset from a CSV file, performing basic
+    operations like filtering, grouping, and visualization.
+
+    Args:
+        file_path (str): Path to the CSV file.
+        output_file (str, optional): Path to save the processed data. Defaults to None.
+
+    Returns:
+        pd.DataFrame: The processed dataset.
     """
-    url = 'https://techcrunch.com/'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/58.0.3029.110 Safari/537.3'}
-    logging.info("Starting web scraping")
 
-    try:
-
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-
-            headlines = soup.find_all('h2')
-            headline_texts = [headline.get_text().strip() for headline in headlines]
-
-            if not headline_texts:
-                print("No headlines found. Check the HTML structure or tag used.")
-                logging.warning("No headlines found in the scraped content.")
-                return None
-
-            headline_df = pd.DataFrame(headline_texts, columns=['Headline'])
-
-            headline_df['Word_Count'] = headline_df['Headline'].apply(lambda x: len(x.split()))
-            headline_df['Character_Count'] = headline_df['Headline'].apply(lambda x: len(x))
-
-            headline_df.to_csv('techcrunch_headlines.csv', index=False)
-            logging.info("Successfully scraped and saved headlines to techcrunch_headlines.csv")
-
-            print(headline_df.head())
-
-            return headline_df
-
-        else:
-            print(f"Failed to retrieve the webpage. Status code: {response.status_code}")
-            logging.error(f"Failed to retrieve the webpage. Status code: {response.status_code}")
-            return None
-
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error during web scraping: {e}")
-        print(f"Failed to retrieve the webpage: {e}")
+    # Check if file exists before proceeding
+    if not os.path.exists(file_path):
+        print(f"Error: The file '{file_path}' was not found. Please check the file path.")
         return None
 
-
-def visualize_data(dataframe):
-    """
-    Visualizes the distribution of word counts and character counts in the headlines.
-    """
     try:
-
-        plt.figure(figsize=(12, 6))
-
-        plt.subplot(1, 2, 1)
-        dataframe['Word_Count'].plot(kind='hist', bins=10, color='white', edgecolor='black')
-        plt.title('Distribution of Headline Word Count')
-        plt.xlabel('Word Count')
-        plt.ylabel('Frequency')
-
-        plt.subplot(1, 2, 2)
-        dataframe['Character_Count'].plot(kind='hist', bins=10, color='salmon', edgecolor='black')
-        plt.title('Distribution of Headline Character Count')
-        plt.xlabel('Character Count')
-        plt.ylabel('Frequency')
-
-        plt.tight_layout()
-        plt.savefig('headline_distributions.png')
-        plt.show()
-        logging.info("Data visualization completed and saved to headline_distributions.png")
-
+        # Load the dataset (using ISO-8859-1 encoding as the file may have special characters)
+        print(f"Loading dataset from '{file_path}'...")
+        data = pd.read_csv(file_path, encoding='ISO-8859-1')
     except Exception as e:
-        logging.error(f"Error during visualization: {e}")
-        print(f"Failed to visualize data: {e}")
+        # Handle any errors that might come up when loading the file
+        print(f"An error occurred while reading the file: {e}")
+        return None
+
+    # Display basic info about the dataset
+    print("\n--- Dataset Overview ---")
+    print(f"Rows: {data.shape[0]}, Columns: {data.shape[1]}")
+    print("Column Names:", data.columns.tolist())
+
+    # Display summary statistics for numerical columns
+    print("\n--- Summary Statistics ---")
+    print(data.describe())
+
+    # Check if expected columns are present for filtering and grouping
+    if "Value" not in data.columns or "Industry" not in data.columns:
+        print("\nError: Required columns 'Value' or 'Industry' are missing in the dataset.")
+        return None
+
+    # Filter the data: Example - selecting rows where 'Value' > 50
+    print("\nFiltering rows where 'Value' > 50...")
+    filtered_data = data[data["Value"] > 50]
+    print(f"Filtered data contains {filtered_data.shape[0]} rows after filtering.")
+
+    # Group the data by 'Industry' and calculate the mean 'Value'
+    print("\nCalculating mean 'Value' per 'Industry'...")
+    grouped_data = data.groupby("Industry")["Value"].mean()
+    print(grouped_data)
+
+    # Visualize the dataset (pairplot example)
+    try:
+        print("\nGenerating pairplot for the dataset...")
+        sns.pairplot(data)
+        plt.suptitle(f"Pairplot of {file_path}", y=1.02)
+        plt.show()
+    except Exception as e:
+        print(f"An error occurred while generating the pairplot: {e}")
+
+    # Save the processed dataset if output file path is provided
+    if output_file:
+        try:
+            print(f"\nSaving processed data to '{output_file}'...")
+            data.to_csv(output_file, index=False)
+            print("File saved successfully.")
+        except Exception as e:
+            print(f"An error occurred while saving the file: {e}")
+
+    return data
 
 
+# Main section of the script
 if __name__ == "__main__":
+    # File path for the dataset (ensure this is in the same directory or provide full path)
+    file_path = 'injury-statistics-work-related-claims-2018-csv.csv'
 
-    headline_data = scrape_techcrunch_headlines()
+    # Output file path for saving processed data
+    output_file = 'processed_injury_statistics.csv'
 
-    if headline_data is not None:
-        visualize_data(headline_data)
+    # Call the processing function
+    processed_data = process_dataset(file_path, output_file)
+
+    # Print final message based on success or failure
+    if processed_data is not None:
+        print("\nData processing completed successfully!")
+    else:
+        print("\nData processing failed.")
