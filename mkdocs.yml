@@ -1,0 +1,11 @@
+site_name: Web Scraping Documentation
+theme:
+  name: mkdocs
+  palette:
+    primary: 'indigo'
+    accent: 'white'
+nav:
+  - Home: index.md
+  - Installation: how to run it.md
+  - Usage: purpose.md
+  - API Reference: dependencies.md
