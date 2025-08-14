@@ -1,94 +1,96 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+from flask import Flask, request, jsonify, send_from_directory
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_cors import CORS
 import os
 
+# Initialize Flask app
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['SECRET_KEY'] = 'your_secret_key'
+db = SQLAlchemy(app)
+CORS(app)  # Allows frontend to communicate with backend
 
-def process_dataset(file_path, output_file=None):
-    """
-    Loads and processes a dataset from a CSV file, performing basic
-    operations like filtering, grouping, and visualization.
+# User Model
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(100), nullable=False)
 
-    Args:
-        file_path (str): Path to the CSV file.
-        output_file (str, optional): Path to save the processed data. Defaults to None.
+# Video Model
+class Video(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(200), nullable=False)
+    uploader_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
-    Returns:
-        pd.DataFrame: The processed dataset.
-    """
+# Login Manager Setup
+login_manager = LoginManager()
+login_manager.init_app(app)
 
-    # Check if file exists before proceeding
-    if not os.path.exists(file_path):
-        print(f"Error: The file '{file_path}' was not found. Please check the file path.")
-        return None
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-    try:
-        # Load the dataset (using ISO-8859-1 encoding as the file may have special characters)
-        print(f"Loading dataset from '{file_path}'...")
-        data = pd.read_csv(file_path, encoding='ISO-8859-1')
-    except Exception as e:
-        # Handle any errors that might come up when loading the file
-        print(f"An error occurred while reading the file: {e}")
-        return None
+# Signup Route
+@app.route('/signup', methods=['POST'])
+def signup():
+    data = request.json
+    username, email, password = data['username'], data['email'], data['password']
+    user = User(username=username, email=email, password=password)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'message': 'Signup successful'}), 201
 
-    # Display basic info about the dataset
-    print("\n--- Dataset Overview ---")
-    print(f"Rows: {data.shape[0]}, Columns: {data.shape[1]}")
-    print("Column Names:", data.columns.tolist())
+# Login Route
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    user = User.query.filter_by(email=data['email'], password=data['password']).first()
+    if user:
+        login_user(user)
+        return jsonify({'message': 'Login successful!', 'user_id': user.id})
+    return jsonify({'error': 'Invalid credentials'}), 401
 
-    # Display summary statistics for numerical columns
-    print("\n--- Summary Statistics ---")
-    print(data.describe())
+# Logout Route
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return jsonify({'message': 'Logged out'})
 
-    # Check if expected columns are present for filtering and grouping
-    if "Value" not in data.columns or "Industry" not in data.columns:
-        print("\nError: Required columns 'Value' or 'Industry' are missing in the dataset.")
-        return None
+# Upload Video Route
+UPLOAD_FOLDER = 'static/videos'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-    # Filter the data: Example - selecting rows where 'Value' > 50
-    print("\nFiltering rows where 'Value' > 50...")
-    filtered_data = data[data["Value"] > 50]
-    print(f"Filtered data contains {filtered_data.shape[0]} rows after filtering.")
+@app.route('/upload', methods=['POST'])
+@login_required
+def upload():
+    if 'video' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    file = request.files['video']
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))
+    new_video = Video(filename=file.filename, uploader_id=current_user.id)
+    db.session.add(new_video)
+    db.session.commit()
+    return jsonify({'message': 'Upload successful'}), 200
 
-    # Group the data by 'Industry' and calculate the mean 'Value'
-    print("\nCalculating mean 'Value' per 'Industry'...")
-    grouped_data = data.groupby("Industry")["Value"].mean()
-    print(grouped_data)
+# Fetch Videos Route
+@app.route('/videos', methods=['GET'])
+@login_required
+def videos():
+    videos = Video.query.filter_by(uploader_id=current_user.id).all()
+    return jsonify({'videos': [{'id': v.id, 'filename': v.filename} for v in videos]})
 
-    # Visualize the dataset (pairplot example)
-    try:
-        print("\nGenerating pairplot for the dataset...")
-        sns.pairplot(data)
-        plt.suptitle(f"Pairplot of {file_path}", y=1.02)
-        plt.show()
-    except Exception as e:
-        print(f"An error occurred while generating the pairplot: {e}")
+# Run App
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
 
-    # Save the processed dataset if output file path is provided
-    if output_file:
-        try:
-            print(f"\nSaving processed data to '{output_file}'...")
-            data.to_csv(output_file, index=False)
-            print("File saved successfully.")
-        except Exception as e:
-            print(f"An error occurred while saving the file: {e}")
+from flask import Flask, request, jsonify, send_from_directory, render_template
 
-    return data
-
-
-# Main section of the script
-if __name__ == "__main__":
-    # File path for the dataset (ensure this is in the same directory or provide full path)
-    file_path = 'injury-statistics-work-related-claims-2018-csv.csv'
-
-    # Output file path for saving processed data
-    output_file = 'processed_injury_statistics.csv'
-
-    # Call the processing function
-    processed_data = process_dataset(file_path, output_file)
-
-    # Print final message based on success or failure
-    if processed_data is not None:
-        print("\nData processing completed successfully!")
-    else:
-        print("\nData processing failed.")
+@app.route('/')
+def home():
+    return send_from_directory('.', 'frontend.html')  # Serves your frontend file
